@@ -125,7 +125,6 @@ namespace ChunkEditorXNA
             /**/
             return;
         }
-
         public void Draw(SpriteBatch spriteBatch)
         {
             if (_texture != null)
@@ -135,7 +134,10 @@ namespace ChunkEditorXNA
 
         }
         #endregion
-        
+        public Button Clone()
+        {
+            return new Button(this._position);
+        }
 
         
     }

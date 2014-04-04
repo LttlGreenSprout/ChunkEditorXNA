@@ -16,6 +16,7 @@ using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Media;
 
 using Keys = Microsoft.Xna.Framework.Input.Keys;
+using ButtonState = Microsoft.Xna.Framework.Input.ButtonState;
 namespace ChunkEditorXNA
 {
     public class ChunkEditorManager
@@ -37,7 +38,10 @@ namespace ChunkEditorXNA
         Texture2D buttonTexture;
         SpriteFont font;
         String currentString;
-        Button saveButton, openButton;
+        Button btnSave, btnOpen, btnUndo, btnRedo;
+        Stack<TileMap> undoStack, redoStack;
+        MouseState prevMouseState;
+        bool updateUndoStack = false;
 
         //debug vars
         List<IComponent> components;
@@ -53,10 +57,14 @@ namespace ChunkEditorXNA
         {
             content = gameManager;
             components = new List<IComponent>();
+            undoStack = new Stack<TileMap>();
+            redoStack = new Stack<TileMap>();
             tileMap = new TileMap(0, 50, 4, 8, BUTTON_TILE_WIDTH, BUTTON_TILE_HEIGHT);
             //tileMap = new TileMap(50, 0, 4, 8, BUTTON_TILE_WIDTH, BUTTON_TILE_HEIGHT);
-            saveButton = new Button(0, 0, BUTTON_FILE_WIDTH, BUTTON_FILE_HEIGHT);
-            openButton = new Button(BUTTON_FILE_WIDTH, 0, BUTTON_FILE_WIDTH, BUTTON_FILE_HEIGHT);
+            btnSave = new Button(0, 0, BUTTON_FILE_WIDTH, BUTTON_FILE_HEIGHT);
+            btnOpen = new Button(BUTTON_FILE_WIDTH, 0, BUTTON_FILE_WIDTH, BUTTON_FILE_HEIGHT);
+            btnUndo = new Button(2 * BUTTON_FILE_WIDTH, 0, BUTTON_FILE_WIDTH, BUTTON_FILE_HEIGHT);
+            btnRedo = new Button(3 * BUTTON_FILE_WIDTH, 0, BUTTON_FILE_WIDTH, BUTTON_FILE_HEIGHT);
             currentString = "#";
 
             KEY_STRING_LOWERCASE = new Dictionary<Keys, string>();
@@ -175,9 +183,18 @@ namespace ChunkEditorXNA
             #endregion
 
             //add other components to be updated and drawn
-            components.Add(saveButton);
-            components.Add(openButton);
+            components.Add(btnSave);
+            components.Add(btnOpen);
+            components.Add(btnUndo);
+            components.Add(btnRedo);
 
+            prevMouseState = Mouse.GetState();
+            
+
+            //TileMap fofuckyourself = new TileMap(50,50,1,1,20,20);
+            //ConfigureTileMap(fofuckyourself);
+            //fofuckyourself[0, 0].Text = "%";
+            //undoStack.Push(fofuckyourself);
         }
         public void LoadContent(SpriteBatch batch)
         {
@@ -188,25 +205,42 @@ namespace ChunkEditorXNA
             //testButton.Font = font;
             ConfigureTileMap();
             //save button
-            saveButton.Texture = buttonTexture;
-            saveButton.Font = font;
-            saveButton.Text = "Save";
-            saveButton.Click += SaveButton_Click;
+            btnSave.Texture = buttonTexture;
+            btnSave.Font = font;
+            btnSave.Text = "Save";
+            btnSave.Click += SaveButton_Click;
             //open button
-            openButton.Texture = buttonTexture;
-            openButton.Font = font;
-            openButton.Text = "Open";
-            openButton.Click += OpenButton_Click;
+            btnOpen.Texture = buttonTexture;
+            btnOpen.Font = font;
+            btnOpen.Text = "Open";
+            btnOpen.Click += OpenButton_Click;
+            //undo button
+            btnUndo.Texture = buttonTexture;
+            btnUndo.Font = font;
+            btnUndo.Text = "Undo";
+            btnUndo.Click += UndoButton_Click;
+            //redo button
+            btnRedo.Texture = buttonTexture;
+            btnRedo.Font = font;
+            btnRedo.Text = "Redo";
+            btnRedo.Click += RedoButton_Click;
+
+            PushTileMapOntoStack(tileMap, undoStack);
         }
         private void ConfigureTileMap()
         {
-            foreach (Button b in tileMap.ButtonMap)
+            ConfigureTileMap(tileMap);
+        }
+        private void ConfigureTileMap(TileMap map)
+        {
+            foreach (Button b in map.ButtonMap)
             {
                 b.Texture = buttonTexture;
                 b.Font = font;
                 b.Text = "#";
                 b.Click += TileButton_Click;
             }
+            //undoStack.Push(map.Clone());
         }
         public void Update()
         {
@@ -216,16 +250,53 @@ namespace ChunkEditorXNA
             //update components
             foreach (IComponent c in components)
                 c.Update();
+            MouseState currMouseState = Mouse.GetState();
+            if (prevMouseState.LeftButton == ButtonState.Pressed && currMouseState.LeftButton == ButtonState.Released)
+                ProcessMouseRelease();
+            prevMouseState = currMouseState;
         }
         public void Draw()
         {
             tileMap.Draw(spriteBatch);
+            //undoStack.Peek().Draw(spriteBatch);
             
             spriteBatch.DrawString(font, currentString, new Vector2(0,tileMap.Y+tileMap.ButtonMap.GetLength(0)*BUTTON_TILE_HEIGHT), Color.Black);
             spriteBatch.DrawString(font, tileMap.ButtonMap[0, 0].Text, new Vector2(50, 0), Color.Black);
 
             foreach (IComponent c in components)
                 c.Draw(spriteBatch);
+
+            spriteBatch.DrawString(font, tileMap.Equals(tileMap).ToString(), new Vector2(200, 0), Color.Black);
+            spriteBatch.DrawString(font, undoStack.Count.ToString(), new Vector2(250, 0), Color.Black);
+            spriteBatch.DrawString(font, redoStack.Count.ToString(), new Vector2(300, 0), Color.Black);
+        }
+        //Handles Mouse Releases for undo Stack
+        private void ProcessMouseRelease()
+        {
+            //if(undoStack.Count > 0 && tileMap.Equals(undoStack.Peek()) == true)
+            //    return;
+            if (updateUndoStack)
+            {
+                PushTileMapOntoStack(tileMap, undoStack);
+                /*
+                TileMap temp = new TileMap(tileMap.X, tileMap.Y, tileMap.Rows, tileMap.Cols, BUTTON_TILE_WIDTH, BUTTON_TILE_HEIGHT);
+                for (int r = 0; r < temp.Rows; r++)
+                    for (int c = 0; c < temp.Cols; c++)
+                        temp[r, c].Text = tileMap[r, c].Text;
+                undoStack.Push(temp);
+                /**/
+                updateUndoStack = false;
+            }
+            
+        }
+        private void PushTileMapOntoStack(TileMap map, Stack<TileMap> stack)
+        {
+            TileMap temp = map.Clone();
+            ConfigureTileMap(temp);
+            for (int r = 0; r < temp.Rows; r++)
+                for (int c = 0; c < temp.Cols; c++)
+                    temp[r, c].Text = map[r, c].Text;
+            stack.Push(temp);
         }
         //Handles all keyboard input
         private void ProcessKeyboardInput()
@@ -279,12 +350,35 @@ namespace ChunkEditorXNA
                     break;
             }
         }
+        public void UndoButton_Click(object sender, MouseState ms)
+        {
+            if (undoStack.Count > 1)
+            {
+                PushTileMapOntoStack(tileMap, redoStack);
+                //tileMap = undoStack.Pop().Clone();
+                TileMap temp = undoStack.Pop();
+                for (int r = 0; r < temp.ButtonMap.GetLength(0); r++)
+                    for (int c = 0; c < temp.ButtonMap.GetLength(1); c++)
+                        tileMap[r, c] = temp[r, c];
+                tileMap = temp;
+            }
+            
+        }
+        public void RedoButton_Click(object sender, MouseState ms)
+        {
+            if (redoStack.Count > 0)
+            {
+                PushTileMapOntoStack(tileMap, undoStack);
+                tileMap = redoStack.Pop();
+            }
+        }
         public void TileButton_Click(object sender, MouseState ms)
         {
             Button b = sender as Button;
             if (b == null)
                 return;
             b.Text = currentString;
+            updateUndoStack = true;
             
         }
         #endregion
@@ -307,7 +401,7 @@ namespace ChunkEditorXNA
             }
             catch
             {
-                MessageBox.Show("SOMETHING SHITTY HAPPENED while saving");
+                MessageBox.Show("SOMETHING \"BadImageFormatException\" HAPPENED while saving");
             }
         }
         public void OpenChunkFromText(String filename)
@@ -331,7 +425,7 @@ namespace ChunkEditorXNA
             }
             catch
             {
-                MessageBox.Show("SOMETHING SHITTY HAPPENED while opening");
+                MessageBox.Show("SOMETHING \"bad\" HAPPENED while opening");
             }
         }
         #endregion

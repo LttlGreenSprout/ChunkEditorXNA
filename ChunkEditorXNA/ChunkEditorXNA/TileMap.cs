@@ -31,6 +31,19 @@ namespace ChunkEditorXNA
         {
             get { return _y; }
         }
+        public int Rows
+        {
+            get { return _buttonMap.GetLength(0); }
+        }
+        public int Cols
+        {
+            get { return _buttonMap.GetLength(1); }
+        }
+        public Button this[int rowIndex, int colIndex]
+        {
+            get { return _buttonMap[rowIndex, colIndex]; }
+            set { _buttonMap[rowIndex, colIndex] = value; }
+        }
 
         public TileMap(int x, int y, int rows, int cols, int buttonWidth, int buttonHeight)
         {
@@ -43,6 +56,28 @@ namespace ChunkEditorXNA
                 for (int c = 0; c < cols; c++)
                     _buttonMap[r, c] = new Button(_x + c * buttonWidth, _y + r * buttonHeight, buttonWidth, buttonHeight);
 
+        }
+        public TileMap Clone()
+        {
+            TileMap cloneMap = new TileMap(_x, _y, _buttonMap.GetLength(0), _buttonMap.GetLength(1), _buttonMap[0,0].Width, _buttonMap[0,0].Height);
+            for (int r = 0; r < _buttonMap.GetLength(0); r++)
+                for (int c = 0; c < _buttonMap.GetLength(1); c++)
+                    cloneMap[r, c] = _buttonMap[r, c].Clone();
+            return cloneMap;
+        }
+
+        public override bool Equals(object obj)
+        {
+            TileMap b = obj as TileMap;
+            if (b == null)
+                return false;
+            if (b.ButtonMap.GetLength(0) != this.ButtonMap.GetLength(0) || b.ButtonMap.GetLength(1) != this.ButtonMap.GetLength(1))
+                return false;
+            for (int r = 0; r < b.ButtonMap.GetLength(0); r++)
+                for (int c = 0; c < b.ButtonMap.GetLength(1); c++)
+                    if (b[r, c].Text != this[r, c].Text)
+                        return false;
+            return true;
         }
 
         public void Update()
